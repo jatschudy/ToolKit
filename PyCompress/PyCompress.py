@@ -1,7 +1,9 @@
 import os
 import subprocess
+import shutil
 import tkinter as tk
 from tkinter import filedialog, messagebox
+from datetime import datetime
 
 
 def zip_folders_with_7zip(source_path, target_path):
@@ -12,24 +14,43 @@ def zip_folders_with_7zip(source_path, target_path):
     if not os.path.exists(target_path):
         os.makedirs(target_path)
 
-    for item in os.listdir(source_path):
-        item_path = os.path.join(source_path, item)
+    # Log file path
+    log_file_path = os.path.join(target_path, "compression_log.txt")
+    
+    with open(log_file_path, "a") as log_file:
+        log_file.write(f"\n=== Compression Log - {datetime.now()} ===\n")
 
-        if os.path.isdir(item_path):
-            zip_file = os.path.join(target_path, f"{item}.7z")
+        for item in os.listdir(source_path):
+            item_path = os.path.join(source_path, item)
 
-            command = ["7z", "a", zip_file, item_path]
+            if os.path.isdir(item_path):  # Process folders only
+                zip_file = os.path.join(target_path, f"{item}.7z")
 
-            try:
-                subprocess.run(command, check=True)
-            except subprocess.CalledProcessError as e:
-                messagebox.showerror("Error", f"Failed to zip '{item}': {e}")
-                return
-            except FileNotFoundError:
-                messagebox.showerror("Error", "7z command not found. Ensure 7-Zip is installed and added to the PATH.")
-                return
+                command = ["7z", "a", zip_file, item_path]
 
-    messagebox.showinfo("Success", "All folders have been zipped successfully!")
+                try:
+                    subprocess.run(command, check=True)
+                    # Verify if the zip file was created
+                    if os.path.exists(zip_file):
+                        log_file.write(f"SUCCESS: Compressed '{item_path}' -> '{zip_file}'\n")
+                        
+                        # Delete source folder
+                        shutil.rmtree(item_path)
+                        log_file.write(f"SUCCESS: Deleted source folder '{item_path}'\n")
+                    else:
+                        log_file.write(f"FAILED: Compression failed for '{item_path}'\n")
+                except subprocess.CalledProcessError as e:
+                    log_file.write(f"ERROR: Failed to compress '{item_path}' - {e}\n")
+                except FileNotFoundError:
+                    log_file.write("ERROR: '7z' command not found. Ensure 7-Zip is installed and added to the PATH.\n")
+                    messagebox.showerror("Error", "7z command not found. Ensure 7-Zip is installed and added to the PATH.")
+                    return
+                except Exception as e:
+                    log_file.write(f"ERROR: An unexpected error occurred - {e}\n")
+        
+        log_file.write("=== Compression Completed ===\n")
+
+    messagebox.showinfo("Success", f"All folders have been processed! Log saved to: {log_file_path}")
 
 
 def browse_source():
@@ -54,7 +75,7 @@ def run_zip():
 
 # Create the main window
 root = tk.Tk()
-root.title("7-Zip Folder Compressor")
+root.title("PyCompressor")
 
 # Source directory
 tk.Label(root, text="Source Directory:").grid(row=0, column=0, padx=10, pady=5, sticky="e")
