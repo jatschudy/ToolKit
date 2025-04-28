@@ -5,7 +5,7 @@ a = Analysis(
     ['PyCompress.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[('tools/7zip/7za.exe', 'tools/7zip')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

@@ -1,85 +1,154 @@
+import customtkinter as ctk
+import tkinter as tk
+from tkinter import filedialog
 import os
 import subprocess
-import shutil
-import tkinter as tk
-from tkinter import filedialog, messagebox
 from datetime import datetime
 
-def zip_folders_with_7zip(source_path, target_path):
-    if not os.path.exists(source_path):
-        messagebox.showerror("Error", f"Source path '{source_path}' does not exist.")
-        return
+ctk.set_appearance_mode("system")  # Modes: system (default), light, dark
+ctk.set_default_color_theme("green")  # Themes: blue (default), dark-blue, green
 
-    if not os.path.exists(target_path):
-        os.makedirs(target_path)
+def start_compress():
+    # Gather Source and Output directories.
+    source_directory = source_input.get()
+    if chkbox.get() == "on": output_directory = output_input.get() 
+    else: output_directory = source_directory
 
-    log_file_path = os.path.join(target_path, "compression_log.txt")
-    
-    with open(log_file_path, "a") as log_file:
-        log_file.write(f"\n=== Compression Log - {datetime.now()} ===\n")
+    # Open log file
+    log_file_path = os.path.join(output_directory, "compression_log.txt")
+    with open(log_file_path, "a") as log: log.write("")
+    with open(log_file_path, "a") as log: log.write(f"\n=== Compression Initialized - {datetime.now()} ===\n")
 
-        for item in os.listdir(source_path):
-            item_path = os.path.join(source_path, item)
-            zip_file = os.path.join(target_path, f"{item}.7z")
+    root_directory_list = os.listdir(source_directory)
+    with open(log_file_path, "a") as log: log.write("Found " + str(len(root_directory_list)) + f" objects - {datetime.now()}\n")
 
-            if os.path.isdir(item_path):  # Process folders only
-                if os.path.exists(zip_file):
-                    log_file.write(f"SKIPPED: '{item_path}' already compressed as '{zip_file}'\n")
+# Primary logic loop starts here.
+    total_i = 0 
+    for item in root_directory_list:
+        total_i += 1
+        # Skips anything that is not a folder.
+        if os.path.isdir(os.path.join(source_directory, item)):
+            with open(log_file_path, "a") as log: log.write("\nCompressing " + item + f" - {datetime.now()}\n")
+        
+            # Initialize zip resources
+            with open(log_file_path, "a") as log: log.write("Zip resources initialized" + f" - {datetime.now()}\n")
+            item_path = os.path.join(source_directory,item).replace("\\","/")
+            zip_path = os.path.join(item_path,item + ".zip").replace("\\","/")
+            zip_app_path = r"C:\\Program Files\\7-Zip\\7z.exe"
+            exclusion_list = ["/xml","/pdf"]
+            zip_list = []
+            book_i = 0
+
+            # Iterate through directory and copy all but exclusions in to the ZIP object
+            for root, dirs, files in os.walk(item_path):
+                relative_root = os.path.relpath(root, item_path).replace("\\", "/")
+                if any(excluded.lower() in relative_root.lower() for excluded in exclusion_list):
                     continue
 
-                command = ["7z", "a", zip_file, item_path]
+                for file in files:
+                    if file != f"{item}.zip":
+                        file_path = os.path.join(root,file)
+                        relative_path = os.path.relpath(file_path,item_path)
+                        zip_list.append(relative_path)
 
-                try:
-                    subprocess.run(command, check=True)
-                    if os.path.exists(zip_file):
-                        log_file.write(f"SUCCESS: Compressed '{item_path}' -> '{zip_file}'\n")
-                        shutil.rmtree(item_path)
-                        log_file.write(f"SUCCESS: Deleted source folder '{item_path}'\n")
+            current_dir = os.getcwd()
+            os.chdir(item_path)
+
+            try:
+                with open(log_file_path, "a") as log: log.write("Zip command issued" + f" - {datetime.now()}\n")
+                for file_path in zip_list:
+                    command = [zip_app_path, "a", '-tzip', zip_path, file_path]
+                    result = subprocess.run(command, capture_output=True, check=True)
+                    book_i += 1
+                    print("Compressing file " + str(book_i) + " of " + str(len(zip_list)) + " in directory " + str(total_i) + " of " + str(len(root_directory_list)))
+
+                    if result.returncode == 0:
+                        try:
+                            with open(log_file_path, "a") as log: log.write("Deleting " + file_path + f" - {datetime.now()}\n")
+                            os.remove(file_path)
+                        except:
+                            with open(log_file_path, "a") as log: log.write("Failed to delete " + file_path + f" - {datetime.now()}\n")
                     else:
-                        log_file.write(f"FAILED: Compression failed for '{item_path}'\n")
-                except subprocess.CalledProcessError as e:
-                    log_file.write(f"ERROR: Failed to compress '{item_path}' - {e}\n")
-                except FileNotFoundError:
-                    log_file.write("ERROR: '7z' command not found. Ensure 7-Zip is installed and added to the PATH.\n")
-                    messagebox.showerror("Error", "7z command not found. Ensure 7-Zip is installed and added to the PATH.")
-                    return
-                except Exception as e:
-                    log_file.write(f"ERROR: An unexpected error occurred - {e}\n")
+                        with open(log_file_path, "a") as log: log.write("Failed to zip " + file_path + f" - {datetime.now()}\n")
+            finally:
+                os.chdir(current_dir)
+
+
+            # Cleanup empty folders
+            delete_empty_folders(source_directory)
+
+        else:
+            with open(log_file_path, "a") as log: log.write("Skipping " + item + f", not a directory - {datetime.now()}\n")
+
+# Primary logic loop ends here.
+    with open(log_file_path, "a") as log: log.write(f"=== Compression Completed - {datetime.now()} ===\n")
+
+def source_directory():
+    folder = filedialog.askdirectory()
+    if folder:
+        source_input.delete(0, tk.END)
+        source_input.insert(0, folder)
+
+def output_directory():
+    folder = filedialog.askdirectory()
+    if folder:
+        output_input.delete(0, tk.END)
+        output_input.insert(0, folder)
+
+def check_event():
+    if chkbox.get() == "on":
+        output_btn.configure(state="normal")
+        output_input.configure(state="normal")
+    else:
+        output_btn.configure(state="disabled")
+        output_input.configure(state="disabled")
+
+def delete_empty_folders(source_directory):
+    for dirpath, dirnames, filenames in os.walk(source_directory, topdown=False):
+        # Try to delete child folders first (because we're bottom-up)
+        for dirname in dirnames:
+            full_path = os.path.join(dirpath, dirname)
+            if os.path.isdir(full_path):
+                try:
+                    os.rmdir(full_path)
+                except OSError:
+                    pass
         
-        log_file.write("=== Compression Completed ===\n")
+        # After trying to delete children, try to delete current folder
+        if not os.listdir(dirpath):
+            try:
+                os.rmdir(dirpath)
+            except OSError:
+                pass
 
-    messagebox.showinfo("Success", f"All folders have been processed! Log saved to: {log_file_path}")
+# User Interface
+app = ctk.CTk()  # create CTk window like you do with the Tk window
+app.title("PyCompress")
+app_dir = os.getcwd()
+app.wm_iconbitmap(app_dir+'\\PyCompress\\images\\app.ico')
+frame_width = 600
+frame_height = 350
+app.geometry(str(frame_width)+'x'+str(frame_height))
 
-def browse_source():
-    folder = filedialog.askdirectory()
-    if folder:
-        source_entry.delete(0, tk.END)
-        source_entry.insert(0, folder)
+# Source Directory
+source_input = ctk.CTkEntry(app, placeholder_text="Folder to Compress (Source & Default Output)", width=frame_width*.5)
+source_btn = ctk.CTkButton(master=app, text="Browse", command=source_directory, width=frame_width*.1)
+source_input.place(relx=0.2, rely=0.2, anchor=ctk.W)
+source_btn.place(relx=0.8, rely=0.2, anchor=ctk.CENTER)
 
-def browse_target():
-    folder = filedialog.askdirectory()
-    if folder:
-        target_entry.delete(0, tk.END)
-        target_entry.insert(0, folder)
+# Output Directory - Only show if checkbox is checked.
+check_var = ctk.StringVar(value="off")
+chkbox = ctk.CTkCheckBox(app, text="Select different output directory", command=check_event, variable=check_var, onvalue="on", offvalue="off")
+chkbox.place(relx=0.2, rely=0.3)
 
-def run_zip():
-    source_path = source_entry.get().strip()
-    target_path = target_entry.get().strip()
-    zip_folders_with_7zip(source_path, target_path)
+# Source Directory
+output_input = ctk.CTkEntry(app, placeholder_text="Output directory", width=frame_width*.5, state="disabled")
+output_btn = ctk.CTkButton(master=app, text="Browse", command=output_directory, width=frame_width*.1, state="disabled")
+output_input.place(relx=0.2, rely=0.5, anchor=ctk.W)
+output_btn.place(relx=0.8, rely=0.5, anchor=ctk.CENTER)
 
-root = tk.Tk()
-root.title("PyCompressor")
+# Run compression
+btn_Compress = ctk.CTkButton(master=app, text="Start", command=start_compress)
+btn_Compress.place(relx=0.5, rely=0.9, anchor=ctk.CENTER)
 
-tk.Label(root, text="Source Directory:").grid(row=0, column=0, padx=10, pady=5, sticky="e")
-source_entry = tk.Entry(root, width=50)
-source_entry.grid(row=0, column=1, padx=10, pady=5)
-tk.Button(root, text="Browse", command=browse_source).grid(row=0, column=2, padx=10, pady=5)
-
-tk.Label(root, text="Target Directory:").grid(row=1, column=0, padx=10, pady=5, sticky="e")
-target_entry = tk.Entry(root, width=50)
-target_entry.grid(row=1, column=1, padx=10, pady=5)
-tk.Button(root, text="Browse", command=browse_target).grid(row=1, column=2, padx=10, pady=5)
-
-tk.Button(root, text="Compress Folders", command=run_zip).grid(row=2, column=0, columnspan=3, pady=10)
-
-root.mainloop()
+app.mainloop()
