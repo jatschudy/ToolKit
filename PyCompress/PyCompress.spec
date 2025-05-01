@@ -5,7 +5,7 @@ a = Analysis(
     ['PyCompress.py'],
     pathex=[],
     binaries=[],
-    datas=[('tools/7zip/7za.exe', 'tools/7zip')],
+    datas=[('resources/7zip', 'resources/7zip'), ('images', 'images')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -35,5 +35,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['vault.ico'],
+    icon=['images\\app.ico'],
 )
