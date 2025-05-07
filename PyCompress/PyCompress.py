@@ -23,6 +23,8 @@ def compress_task():
     with open(log_file_path, "a") as log:
         log.write(f"\n=== Compression Initialized - {datetime.now()} ===\n")
 
+    lbl_Status.configure(text="Getting directory list.")
+
     root_directory_list = os.listdir(source_directory)
     with open(log_file_path, "a") as log:
         log.write(f"Found {len(root_directory_list)} objects - {datetime.now()}\n")
@@ -46,26 +48,14 @@ def compress_task():
 
             exclusion_list = ["/xml", "/pdf"]
             zip_list = []
-
-            # Consider adjusting to use only files and gather every file.  Then ignore the exlusions later when processing the files.
-            #for root, dirs, files in os.walk(item_path):
-            #    relative_root = os.path.relpath(root, item_path).replace("\\", "/")
-            #    if any(excluded.lower() in relative_root.lower() for excluded in exclusion_list):
-            #        continue
-            #    for file in files:
-            #        if file != f"{item}.zip":
-            #            file_path = os.path.join(root, file)
-            #            relative_path = os.path.relpath(file_path, item_path)
-            #            # IF path !contains exclusion - append
-            #            zip_list.append(relative_path)
-            
+     
             # Consider adjusting to use only files and gather every file.  Then ignore the exlusions later when processing the files.
             for root, dirs, files in os.walk(item_path):
+                lbl_Status.configure(text="Gathering file list.")
                 for file in files:
                     if file != f"{item}.zip":
                         file_path = os.path.join(root, file)
                         relative_path = os.path.relpath(file_path, item_path).replace("\\","/")
-                        print(relative_path)
                         if not any(excluded in relative_path.lower() for excluded in exclusion_list):
                             with open(log_file_path, "a") as log:
                                 log.write("Added " + relative_path + f" - {datetime.now()}\n")
@@ -81,14 +71,18 @@ def compress_task():
                 CREATE_NO_WINDOW = 0x08000000
                 item_i = 0
                 for file_path in zip_list:
+                    lbl_Status.configure(text="Zipping " + file_path)
                     command = [zip_app_path, "a", "-tzip", zip_path, file_path]
                     result = subprocess.run(command, capture_output=True, check=True, creationflags=CREATE_NO_WINDOW)
+                    with open(log_file_path, "a") as log:
+                        log.write("Zipping " + file_path + f" - {datetime.now()}\n")
                     item_i += 1
                     progress = item_i / len(zip_list)
                     progress_item.after(0, progress_item.set, progress)
 
                     if result.returncode == 0:
                         try:
+                            lbl_Status.configure(text="Deleting " + file_path)
                             os.remove(file_path)
                             with open(log_file_path, "a") as log:
                                 log.write(f"Deleted {file_path} - {datetime.now()}\n")
@@ -172,29 +166,32 @@ app.geometry(str(frame_width)+'x'+str(frame_height))
 # Source Directory
 source_input = ctk.CTkEntry(app, placeholder_text="Folder to Compress (Source & Default Output)", width=frame_width*.5)
 source_btn = ctk.CTkButton(master=app, text="Browse", command=source_directory, width=frame_width*.1)
-source_input.place(relx=0.2, rely=0.2, anchor=ctk.W)
-source_btn.place(relx=0.8, rely=0.2, anchor=ctk.CENTER)
+source_input.place(relx=0.2, rely=0.1, anchor=ctk.W)
+source_btn.place(relx=0.8, rely=0.1, anchor=ctk.CENTER)
 
 # Output Directory - Only show if checkbox is checked.
 check_var = ctk.StringVar(value="off")
 chkbox = ctk.CTkCheckBox(app, text="Select different output directory", command=check_event, variable=check_var, onvalue="on", offvalue="off")
-chkbox.place(relx=0.2, rely=0.3)
+chkbox.place(relx=0.2, rely=0.2)
 
 # Source Directory
 output_input = ctk.CTkEntry(app, placeholder_text="Output directory", width=frame_width*.5, state="disabled")
 output_btn = ctk.CTkButton(master=app, text="Browse", command=output_directory, width=frame_width*.1, state="disabled")
-output_input.place(relx=0.2, rely=0.5, anchor=ctk.W)
-output_btn.place(relx=0.8, rely=0.5, anchor=ctk.CENTER)
+output_input.place(relx=0.2, rely=0.35, anchor=ctk.W)
+output_btn.place(relx=0.8, rely=0.35, anchor=ctk.CENTER)
 
 progress_item = ctk.CTkProgressBar(app, width=frame_width*.6, height=frame_height*.05)
 progress_item.set(0)
-progress_item.place(relx=0.2, rely=0.65)
+progress_item.place(relx=0.2, rely=0.5)
 progress_total = ctk.CTkProgressBar(app, width=frame_width*.6, height=frame_height*.05)
 progress_total.set(0)
-progress_total.place(relx=0.2, rely=0.75)
+progress_total.place(relx=0.2, rely=0.6)
 
 # Run compression
 btn_Compress = ctk.CTkButton(master=app, text="Start", command=start_compress)
-btn_Compress.place(relx=0.5, rely=0.9, anchor=ctk.CENTER)
+btn_Compress.place(relx=0.5, rely=0.75, anchor=ctk.CENTER)
+
+lbl_Status = ctk.CTkLabel(master=app, width=frame_width*0.8, justify="center", text="")
+lbl_Status.place(relx=0.5, rely=0.9, anchor=ctk.CENTER)
 
 app.mainloop()
