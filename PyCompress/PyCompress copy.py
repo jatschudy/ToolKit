@@ -11,6 +11,7 @@ ctk.set_appearance_mode("system")  # Modes: system (default), light, dark
 ctk.set_default_color_theme("green")  # Themes: blue (default), dark-blue, green
 
 def start_compress():
+    # Disable UI elements here if needed
     threading.Thread(target=compress_task, daemon=True).start()
 
 def compress_task():
@@ -38,59 +39,61 @@ def compress_task():
             with open(log_file_path, "a") as log:
                 log.write(f"\nCompressing {item} - {datetime.now()}\n")
 
+            with open(log_file_path, "a") as log:
+                log.write(f"Zip resources initialized - {datetime.now()}\n")
+
             zip_path = os.path.join(item_path, item + ".zip").replace("\\", "/")
             zip_app_path = os.path.abspath(resource_path(os.path.join("resources", "7zip", "7za.exe")))
             assert os.path.isfile(zip_app_path), f"7za.exe not found at: {zip_app_path}"
 
             exclusion_list = ["/xml", "/pdf"]
             zip_list = []
-
-            # Gather filtered files
+     
+            # Consider adjusting to use only files and gather every file.  Then ignore the exlusions later when processing the files.
             for root, dirs, files in os.walk(item_path):
                 lbl_Status.configure(text="Gathering file list.")
                 for file in files:
                     if file != f"{item}.zip":
                         file_path = os.path.join(root, file)
-                        relative_path = os.path.relpath(file_path, item_path).replace("\\", "/")
+                        relative_path = os.path.relpath(file_path, item_path).replace("\\","/")
                         if not any(excluded in relative_path.lower() for excluded in exclusion_list):
                             with open(log_file_path, "a") as log:
                                 log.write("Added " + relative_path + f" - {datetime.now()}\n")
                             zip_list.append(relative_path)
 
-            if zip_list:
-                current_dir = os.getcwd()
-                os.chdir(item_path)
-                try:
+            current_dir = os.getcwd()
+            os.chdir(item_path)
+
+            try:
+                with open(log_file_path, "a") as log:
+                    log.write(f"Zip command issued - {datetime.now()}\n")
+
+                CREATE_NO_WINDOW = 0x08000000
+                item_i = 0
+                for file_path in zip_list:
+                    lbl_Status.configure(text="Zipping " + file_path)
+                    command = [zip_app_path, "a", "-tzip", zip_path, file_path]
+                    result = subprocess.run(command, capture_output=True, check=True, creationflags=CREATE_NO_WINDOW)
                     with open(log_file_path, "a") as log:
-                        log.write(f"Zip command issued for {len(zip_list)} files - {datetime.now()}\n")
+                        log.write("Zipping " + file_path + f" - {datetime.now()}\n")
+                    item_i += 1
+                    progress = item_i / len(zip_list)
+                    progress_item.after(0, progress_item.set, progress)
 
-                    lbl_Status.configure(text=f"Zipping {len(zip_list)} files...")
-                    CREATE_NO_WINDOW = 0x08000000
-                    # Run one 7-Zip process for all files
-                    command = [zip_app_path, "a", "-tzip", zip_path] + zip_list
-                    subprocess.run(command, capture_output=True, check=True, creationflags=CREATE_NO_WINDOW)
-
-                    # Update progress bar in bulk mode
-                    progress_item.after(0, progress_item.set, 1.0)
-
-                    # Delete files after successful zip
-                    lbl_Status.configure(text="Deleting source files...")
-                    deleted_count = 0
-                    for rel_path in zip_list:
-                        full_path = os.path.join(item_path, rel_path)
+                    if result.returncode == 0:
                         try:
-                            os.remove(full_path)
-                            deleted_count += 1
+                            lbl_Status.configure(text="Deleting " + file_path)
+                            os.remove(file_path)
                             with open(log_file_path, "a") as log:
-                                log.write(f"Deleted {rel_path} - {datetime.now()}\n")
+                                log.write(f"Deleted {file_path} - {datetime.now()}\n")
                         except:
                             with open(log_file_path, "a") as log:
-                                log.write(f"Failed to delete {rel_path} - {datetime.now()}\n")
-
-                    with open(log_file_path, "a") as log:
-                        log.write(f"Deleted {deleted_count} files - {datetime.now()}\n")
-                finally:
-                    os.chdir(current_dir)
+                                log.write(f"Failed to delete {file_path} - {datetime.now()}\n")
+                    else:
+                        with open(log_file_path, "a") as log:
+                            log.write(f"Failed to zip {file_path} - {datetime.now()}\n")
+            finally:
+                os.chdir(current_dir)
 
             delete_empty_folders(source_directory)
         else:
@@ -104,10 +107,13 @@ def compress_task():
 
 # Setup for PyInstaller path handling
 def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller bundle """
     try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
         base_path = sys._MEIPASS
     except AttributeError:
         base_path = os.path.dirname(os.path.abspath(__file__))
+
     return os.path.join(base_path, relative_path)
 
 def source_directory():
@@ -132,6 +138,7 @@ def check_event():
 
 def delete_empty_folders(source_directory):
     for dirpath, dirnames, filenames in os.walk(source_directory, topdown=False):
+        # Try to delete child folders first
         for dirname in dirnames:
             full_path = os.path.join(dirpath, dirname)
             if os.path.isdir(full_path):
@@ -139,6 +146,8 @@ def delete_empty_folders(source_directory):
                     os.rmdir(full_path)
                 except OSError:
                     pass
+        
+        # After trying to delete children, try to delete current folder
         if not os.listdir(dirpath):
             try:
                 os.rmdir(dirpath)
@@ -146,12 +155,13 @@ def delete_empty_folders(source_directory):
                 pass
 
 # User Interface
-app = ctk.CTk()
+app = ctk.CTk()  # create CTk window like you do with the Tk window
 app.title("PyCompress")
 app_dir = os.getcwd()
+#app.wm_iconbitmap(app_dir+'\\PyCompress\\images\\app.ico')
 frame_width = 600
 frame_height = 350
-app.geometry(f"{frame_width}x{frame_height}")
+app.geometry(str(frame_width)+'x'+str(frame_height))
 
 # Source Directory
 source_input = ctk.CTkEntry(app, placeholder_text="Folder to Compress (Source & Default Output)", width=frame_width*.5)
@@ -159,12 +169,12 @@ source_btn = ctk.CTkButton(master=app, text="Browse", command=source_directory, 
 source_input.place(relx=0.2, rely=0.1, anchor=ctk.W)
 source_btn.place(relx=0.8, rely=0.1, anchor=ctk.CENTER)
 
-# Output Directory
+# Output Directory - Only show if checkbox is checked.
 check_var = ctk.StringVar(value="off")
-chkbox = ctk.CTkCheckBox(app, text="Select different output directory", command=check_event,
-                         variable=check_var, onvalue="on", offvalue="off")
+chkbox = ctk.CTkCheckBox(app, text="Select different output directory", command=check_event, variable=check_var, onvalue="on", offvalue="off")
 chkbox.place(relx=0.2, rely=0.2)
 
+# Source Directory
 output_input = ctk.CTkEntry(app, placeholder_text="Output directory", width=frame_width*.5, state="disabled")
 output_btn = ctk.CTkButton(master=app, text="Browse", command=output_directory, width=frame_width*.1, state="disabled")
 output_input.place(relx=0.2, rely=0.35, anchor=ctk.W)
@@ -177,6 +187,7 @@ progress_total = ctk.CTkProgressBar(app, width=frame_width*.6, height=frame_heig
 progress_total.set(0)
 progress_total.place(relx=0.2, rely=0.6)
 
+# Run compression
 btn_Compress = ctk.CTkButton(master=app, text="Start", command=start_compress)
 btn_Compress.place(relx=0.5, rely=0.75, anchor=ctk.CENTER)
 
